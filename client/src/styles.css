@@ -1,0 +1,7 @@
+body { font-family: system-ui, Arial, sans-serif; margin:0; }
+.upload-card { max-width:720px; border:1px solid #eee; padding:16px; border-radius:8px; }
+.searchbar { display:flex; gap:8px; margin-bottom:12px; }
+.viewer { border:1px solid #ddd; padding:8px; height:78vh; overflow:auto; }
+.matches { width:360px; max-height:78vh; overflow:auto; border:1px solid #eee; padding:8px; }
+.match-item { padding:8px; border-bottom:1px solid #f0f0f0; cursor:pointer; }
+.highlit { background: yellow; }
