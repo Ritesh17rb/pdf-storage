@@ -158,7 +158,7 @@ app.get('/api/search/:id', async (req, res) => {
     if (!q) return res.json({ results: [] });
 
     const { data, error } = await supabase
-      .from('pdfs')  // FIXED
+      .from('pdfs')
       .select('pages')
       .eq('id', id)
       .single();
@@ -166,30 +166,32 @@ app.get('/api/search/:id', async (req, res) => {
     if (error || !data)
       return res.status(404).json({ error: 'Not found' });
 
+    const pages = data.pages || [];
+
     const fuse = new Fuse(pages, {
-  keys: ['text'],
-  includeMatches: true,
-  threshold: 0.4,
-  ignoreLocation: true
-});
+      keys: ['text'],
+      includeMatches: true,
+      threshold: 0.4,
+      ignoreLocation: true
+    });
 
-const fuseRes = fuse.search(q);
+    const fuseRes = fuse.search(q);
 
-const results = fuseRes.map(r => {
-  const matchRanges = r.matches?.[0]?.indices || [];
-  let snippet = q;
+    const results = fuseRes.map(r => {
+      const matchRanges = r.matches?.[0]?.indices || [];
+      let snippet = q;
 
-  if (matchRanges.length > 0) {
-    const [start, end] = matchRanges[0];
-    snippet = r.item.text.substring(start, end + 1);
-  }
+      if (matchRanges.length > 0) {
+        const [start, end] = matchRanges[0];
+        snippet = r.item.text.substring(start, end + 1);
+      }
 
-  return {
-    page: r.item.page,
-    text: snippet,     // <<< THIS is highlightable
-    score: r.score     // <<< send to frontend
-  };
-});
+      return {
+        page: r.item.page,
+        text: snippet,
+        score: r.score
+      };
+    });
 
     res.json({ results });
 
@@ -198,6 +200,7 @@ const results = fuseRes.map(r => {
     res.status(500).json({ error: String(err) });
   }
 });
+
 
 // Start server
 const PORT = process.env.PORT || 4000;
