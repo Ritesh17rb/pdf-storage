@@ -1,8 +1,8 @@
 /**
  * server/index.js
  * Corrected version – using:
- *   Bucket name: "PDFs"
- *   Table name: "pdfs"
+ * Bucket name: "PDFs"
+ * Table name: "pdfs"
  */
 
 require('dotenv').config();
@@ -101,6 +101,10 @@ app.post('/api/upload', upload.single('pdf'), async (req, res) => {
 
   } catch (err) {
     console.error('❌ Upload error:', err);
+    // Ensure cleanup in case of failure after upload but before insert
+    if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+    }
     return res.status(500).json({ error: String(err) });
   }
 });
@@ -113,7 +117,7 @@ app.get('/api/meta/:id', async (req, res) => {
   const id = req.params.id;
 
   const { data, error } = await supabase
-    .from('pdfs')   // FIXED
+    .from('pdfs')
     .select('id, filename, storage_path, original_size, created_at')
     .eq('id', id)
     .single();
@@ -131,7 +135,7 @@ app.get('/api/pdf-url/:id', async (req, res) => {
   const id = req.params.id;
 
   const { data, error } = await supabase
-    .from('pdfs')  // FIXED
+    .from('pdfs')
     .select('storage_path')
     .eq('id', id)
     .single();
@@ -163,44 +167,61 @@ app.get('/api/search/:id', async (req, res) => {
       .eq('id', id)
       .single();
 
-    if (error || !data)
-      return res.status(404).json({ error: 'Not found' });
+    if (error || !data) return res.status(404).json({ error: 'Not found' });
 
     const pages = data.pages || [];
 
     const fuse = new Fuse(pages, {
       keys: ['text'],
       includeMatches: true,
-      threshold: 0.4,
-      ignoreLocation: true
+      includeScore: true,
+      threshold: 0.3,
+      distance: 100,
+      minMatchCharLength: 2,
+      ignoreLocation: false,
     });
 
     const fuseRes = fuse.search(q);
 
-    const results = fuseRes.map(r => {
+    const mapped = fuseRes.map(r => {
       const matchRanges = r.matches?.[0]?.indices || [];
+      const itemText = r.item.text || '';
       let snippet = q;
 
       if (matchRanges.length > 0) {
         const [start, end] = matchRanges[0];
-        snippet = r.item.text.substring(start, end + 1);
+        const pad = 40;
+        const s = Math.max(0, start - pad);
+        const e = Math.min(itemText.length - 1, end + pad);
+        snippet = itemText.substring(s, e + 1).replace(/\s+/g, ' ').trim();
+      } else {
+        const idx = itemText.toLowerCase().indexOf(q.toLowerCase());
+        if (idx !== -1) {
+          const pad = 40;
+          const s = Math.max(0, idx - pad);
+          const e = Math.min(itemText.length - 1, idx + q.length + pad);
+          snippet = itemText.substring(s, e + 1).replace(/\s+/g, ' ').trim();
+        }
       }
 
       return {
         page: r.item.page,
         text: snippet,
-        score: r.score
+        needle: q,
+        score: r.score,
       };
     });
 
-    res.json({ results });
+    const results = mapped
+      .sort((a, b) => (a.score ?? 1) - (b.score ?? 1))
+      .slice(0, 10);
 
+    res.json({ results });
   } catch (err) {
-    console.error('❌ Search error:', err);
+    console.error('Search error:', err);
     res.status(500).json({ error: String(err) });
   }
 });
-
 
 // Start server
 const PORT = process.env.PORT || 4000;
